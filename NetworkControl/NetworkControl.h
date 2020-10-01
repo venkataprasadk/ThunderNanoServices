@@ -33,6 +33,9 @@ namespace Plugin {
                            public PluginHost::IWeb,
                            public PluginHost::JSONRPC {
     public:
+        private:
+        typedef std::list<string> InterfaceList;
+
         class Entry : public Core::JSON::Container {
         public:
             Entry& operator=(const Entry&) = delete;
@@ -601,6 +604,9 @@ namespace Plugin {
         uint32_t set_up(const string& index, const Core::JSON::Boolean& param);
         void event_connectionchange(const string& name, const string& address, const JsonData::NetworkControl::ConnectionchangeParamsData::StatusType& status);
 
+        friend Core::ThreadPool::JobType<NetworkControl&>;
+        void Dispatch();
+
     private:
         mutable Core::CriticalSection _adminLock;
         uint16_t _skipURL;
@@ -614,6 +620,9 @@ namespace Plugin {
         std::map<const string, DHCPEngine> _dhcpInterfaces;
         AdapterObserver _observer;
         bool _open;
+
+        InterfaceList _requiredInterfaces;
+        Core::WorkerPool::JobType<NetworkControl&> _timer;
     };
 
 } // namespace Plugin

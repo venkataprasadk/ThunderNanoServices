@@ -29,6 +29,7 @@ namespace Plugin
     static Core::ProxyPoolType<Web::Response> responseFactory(4);
     static Core::ProxyPoolType<Web::JSONBodyType<Core::JSON::ArrayType<JsonData::NetworkControl::NetworkData>>> jsonNetworksFactory(1);
     static TCHAR NAMESERVER[] = "nameserver ";
+    static int32_t constexpr TimerInterval = 500;   // In millisconds
 
     static bool ExternallyAccessible(const Core::AdapterIterator& index) {
 
@@ -71,6 +72,8 @@ namespace Plugin
         , _dhcpInterfaces()
         , _observer(*this)
         , _open(false)
+        , _requiredInterfaces()
+        , _timer(*this)
     {
         RegisterAll();
     }
@@ -81,6 +84,7 @@ namespace Plugin
     /* virtual */ NetworkControl::~NetworkControl()
     {
         UnregisterAll();
+        _timer.Revoke();
     }
 
     /* virtual */ const string NetworkControl::Initialize(PluginHost::IShell * service)
@@ -150,30 +154,20 @@ namespace Plugin
                 if (hardware.IsValid() == false) {
                     SYSLOG(Logging::Startup, (_T("Interface [%s], not available"), interfaceName.c_str()));
                 } else {
-                    JsonData::NetworkControl::NetworkData::ModeType how;
                     std::map<const string, const Entry>::const_iterator more (info.find(interfaceName));
 
                     if (more != info.end()) {
-                        auto element = _dhcpInterfaces.emplace(std::piecewise_construct,
+                        _dhcpInterfaces.emplace(std::piecewise_construct,
                             std::forward_as_tuple(interfaceName),
                             std::forward_as_tuple(*this, interfaceName, _responseTime, _retries, more->second));
-                        how = (element.first->second.Info().Mode());
                     }
                     else {
-                        auto element = _dhcpInterfaces.emplace(std::piecewise_construct,
+                        _dhcpInterfaces.emplace(std::piecewise_construct,
                             std::forward_as_tuple(interfaceName),
                             std::forward_as_tuple(*this, interfaceName, _responseTime, _retries, index.Current()));
-                        how = (element.first->second.Info().Mode());
-                    }
-
-                    if (hardware.IsUp() == false) {
-                        hardware.Up(true);
-                    }
-                    else {
-                        ClearIP(hardware);
-                        Reload(interfaceName, (how == JsonData::NetworkControl::NetworkData::ModeType::DYNAMIC));
                     }
                 }
+                _requiredInterfaces.push_back(interfaceName);
             }
         }
 
@@ -194,6 +188,7 @@ namespace Plugin
                 }
             }
         }
+        _timer.Submit();
 
         // On success return empty, to indicate there is no error text.
         return (result);
@@ -868,7 +863,34 @@ namespace Plugin
 
         _adminLock.Unlock();
     }
+    void NetworkControl::Dispatch() {
 
+        InterfaceList::iterator index(_requiredInterfaces.begin());
+        while (index != _requiredInterfaces.end()) {
+            Core::AdapterIterator hardware(*index);
+
+            if (hardware.IsValid() == false) {
+                SYSLOG(Logging::Startup, (_T("Interface [%s], not available... retrying"), (*index).c_str()));
+            } else {
+                std::map<const string, DHCPEngine>::iterator entry(_dhcpInterfaces.find(*index));
+
+                if (entry != _dhcpInterfaces.end()) {
+                    if (hardware.IsUp() == false) {
+                        hardware.Up(true);
+                    }
+                    else {
+                        ClearIP(hardware);
+                        Reload(*index, (entry->second.Info().Mode() == JsonData::NetworkControl::NetworkData::ModeType::DYNAMIC));
+                    }
+                }
+                index  = _requiredInterfaces.erase(index);
+            }
+        }
+        if (_requiredInterfaces.size()) {
+            _timer.Revoke();
+            _timer.Schedule(Core::Time::Now().Add(TimerInterval));
+        }
+    }
 } // namespace Plugin
 } // namespace WPEFramework
 

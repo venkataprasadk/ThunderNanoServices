@@ -884,6 +884,8 @@ namespace Plugin
                     }
                 }
                 index  = _requiredInterfaces.erase(index);
+            } else {
+                index++;
             }
         }
         if (_requiredInterfaces.size()) {

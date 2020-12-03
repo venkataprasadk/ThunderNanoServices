@@ -14,6 +14,11 @@
 * [FirmwareControl](FirmwareControl/doc/FirmwareControlPlugin.md)
 * FrontPanel
 * [InputSwitch](InputSwitch/doc/InputSwitchPlugin.md)
+
+
+
+
+
 * [IOConnector](IOConnector/doc/IOConnectorPlugin.md)
 * [NetworkControl](NetworkControl/doc/NetworkControlPlugin.md)
 * [PlayerInfo](PlayerInfo/doc/PlayerInfo.md)
